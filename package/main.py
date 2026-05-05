@@ -490,7 +490,7 @@ COMPRESSION_API_KEY=your-api-key-here
 COMPRESSION_BASE_URL=https://api.openai.com/v1
 
 # JWT 密钥 (请修改为随机字符串)
-SECRET_KEY=please-change-this-to-a-random-string-32-chars
+SECRET_KEY=7da885356de9bf60d1e11fa74dbdb282
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 
