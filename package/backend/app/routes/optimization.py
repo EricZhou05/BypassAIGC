@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request, Header
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request, Header, Query
 from sqlalchemy.orm import Session, defer
 from sqlalchemy import func, and_, case
 from typing import List, Optional
@@ -21,22 +21,43 @@ from sse_starlette.sse import EventSourceResponse
 router = APIRouter(prefix="/optimization", tags=["optimization"])
 
 
-def get_current_user(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> User:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="未提供认证令牌")
+def get_current_user(
+    authorization: Optional[str] = Header(None),
+    card_key: Optional[str] = Query(None),
+    token: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+) -> User:
+    """获取当前用户，支持 JWT Bearer Token、query 中的 token 或 card_key (兼容旧版)"""
+    if authorization and authorization.startswith("Bearer "):
+        jwt_token = authorization.split(" ")[1]
+        user_id = get_user_from_token(jwt_token)
+        if user_id is not None:
+            user = db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
+            if user:
+                user.last_used = datetime.utcnow()
+                db.commit()
+                return user
 
-    token = authorization.split(" ")[1]
-    user_id = get_user_from_token(token)
-    if user_id is None:
-        raise HTTPException(status_code=401, detail="令牌无效或已过期")
+    if token:
+        user_id = get_user_from_token(token)
+        if user_id is not None:
+            user = db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
+            if user:
+                user.last_used = datetime.utcnow()
+                db.commit()
+                return user
 
-    user = db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="用户不存在或已被禁用")
+    if card_key:
+        user = db.query(User).filter(
+            User.card_key == card_key,
+            User.is_active.is_(True),
+        ).first()
+        if user:
+            user.last_used = datetime.utcnow()
+            db.commit()
+            return user
 
-    user.last_used = datetime.utcnow()
-    db.commit()
-    return user
+    raise HTTPException(status_code=401, detail="未提供有效认证或令牌已过期")
 
 
 async def run_optimization(session_id: int):
